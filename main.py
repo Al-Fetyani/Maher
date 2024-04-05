@@ -1,4 +1,3 @@
-from docx import Document
 from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QApplication,
@@ -10,6 +9,8 @@ from PyQt6 import QtWidgets, uic
 import pandas as pd
 import sys
 from pathlib import Path
+from word_processor import *
+import tempfile
 
 file = Path(__file__).resolve()
 
@@ -267,38 +268,31 @@ class MainWindow(QMainWindow):
             )
 
     def generate(self):
-        if self.template_file:
-            data = {
-                f"{{{{{self.df.columns[column]}}}}}": column
-                for column in range(self.df.shape[1])
-            }
-            for row_index in range(self.selected_data.rowCount()):
-                file_name = self.selected_data.item(row_index, 0).text()
-                data = {
-                    f"{{{{{self.df.columns[column]}}}}}": self.selected_data.item(
-                        row_index, column
-                    ).text()
-                    for column in range(self.selected_data.columnCount())
-                }
-                doc = Document(self.template_file)
-                for paragraph in doc.paragraphs:
-                    for key, value in data.items():
-                        if key in paragraph.text:
-                            paragraph.text = paragraph.text.replace(key, value)
-                doc.save(f"{file_name}.docx")
-            QMessageBox.information(
-                self,
-                "Success",
-                f"{self.selected_data.rowCount()} templates filled successfully!",
-                QMessageBox.StandardButton.Ok,
-            )
-        else:
+        if not self.template_file:
             QMessageBox.warning(
                 self,
                 "Error",
                 "No template file selected",
                 QMessageBox.StandardButton.Ok,
             )
+            return
+        docs = []
+        for row_index in range(self.selected_data.rowCount()):
+            template = read_docx(self.template_file)
+
+            data = {
+                f"{{{{{self.df.columns[column]}}}}}": self.selected_data.item(
+                    row_index, column
+                ).text()
+                for column in range(self.selected_data.columnCount())
+            }
+            replace_placeholder(template, data)
+            docs.append(template)
+        output = merge_documents(docs)
+        with tempfile.TemporaryDirectory(delete=False) as tmp:
+            path = Path(tmp) / f"{next(tempfile._get_candidate_names())}.docx"
+            save_word(output, path)
+            launch_word(path)
 
 
 if __name__ == "__main__":

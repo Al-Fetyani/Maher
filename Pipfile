@@ -4,10 +4,11 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-python-docx = "*"
 pandas = "*"
 pyqt6 = "*"
 openpyxl = "*"
+pywin32 = "*"
+python-docx = "*"
 
 [dev-packages]
 pyinstaller = "*"
