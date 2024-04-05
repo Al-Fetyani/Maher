@@ -9,6 +9,7 @@ pandas = "*"
 pyqt6 = "*"
 
 [dev-packages]
+pyinstaller = "*"
 
 [requires]
 python_version = "3.12"
