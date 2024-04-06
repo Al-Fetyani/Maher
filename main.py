@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QApplication,
@@ -15,6 +16,12 @@ import tempfile
 file = Path(__file__).resolve()
 
 
+@dataclass
+class Template:
+    name: str
+    path: str
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -23,12 +30,16 @@ class MainWindow(QMainWindow):
         self.full_data.itemClicked.connect(self.select_row_full_data)
         self.selected_data.itemClicked.connect(self.select_row_selected_data)
         self.template_file = None
+        self.templates = []
 
         self.excel_btn.clicked.connect(self.load_excel)
-        self.template_btn.clicked.connect(self.load_template)
         self.remove_btn.clicked.connect(self.remove_from_selected)
         self.add_btn.clicked.connect(self.add_to_selected)
-        self.generate_btn.clicked.connect(self.generate)
+        self.generate_btn.clicked.connect(self.open)
+        self.add_template_btn.clicked.connect(self.add_template)
+        self.remove_template_btn.clicked.connect(self.remove_template)
+
+        self.template_cb.currentIndexChanged.connect(self.get_template)
 
         self.search_txt.textChanged.connect(self.search)
         self.original_selected_data = None
@@ -46,8 +57,47 @@ class MainWindow(QMainWindow):
         self.selected_data.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
-
         self.selected_data.dropEvent = self.drop_event
+
+    def add_template(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Open Template File", "", "Word Files (*.docx)"
+        )
+        if not file_name:
+            return
+        self.templates.append(Template(Path(file_name).stem, file_name))
+        self.template_cb.addItem(Path(file_name).stem)
+
+    def remove_template(self):
+        index = self.template_cb.currentIndex()
+        if index == -1:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Confirmation",
+            "Are you sure you want to remove the template?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm == QMessageBox.StandardButton.No:
+            return
+        template_name = self.template_cb.itemText(index)
+        if not template_name:
+            return
+        self.template_cb.removeItem(index)
+        self.templates = [
+            template for template in self.templates if template.name != template_name
+        ]
+
+    def get_template(self):
+        seleted_template = self.template_cb.currentText()
+        self.template_file = next(
+            (
+                template.path
+                for template in self.templates
+                if template.name == seleted_template
+            ),
+            None,
+        )
 
     def drop_event(self, event):
         event.accept()
@@ -90,13 +140,6 @@ class MainWindow(QMainWindow):
             self, "Open Excel File", "", "Excel Files (*.xlsx)"
         )
         return file_name
-
-    def load_template(self):
-        file_name, _ = QFileDialog.getOpenFileName(
-            self, "Open Template File", "", "Word Files (*.docx)"
-        )
-        if file_name:
-            self.template_file = file_name
 
     def select_row_full_data(self, item):
         row_index = item.row()
@@ -267,7 +310,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Ok,
             )
 
-    def generate(self):
+    def open(self):
         if not self.template_file:
             QMessageBox.warning(
                 self,
