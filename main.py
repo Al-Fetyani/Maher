@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from models import Template
 from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QApplication,
@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from word_processor import *
 import tempfile
-import configparser
+from utils import save_templates, load_templates
 
 
 INI_FILE = Path(__file__).parent / "config.ini"
@@ -20,22 +20,14 @@ INI_FILE = Path(__file__).parent / "config.ini"
 file = Path(__file__).resolve()
 
 
-@dataclass
-class Template:
-    name: str
-    path: str
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         uic.loadUi(file.parent / "ui.ui", self)
         self.show()
-        self.template_file = None
-        self.load_saved_data()
         self.full_data.itemClicked.connect(self.select_row_full_data)
         self.selected_data.itemClicked.connect(self.select_row_selected_data)
-        self.excel_btn.clicked.connect(self.load_excel)
+        self.excel_btn.clicked.connect(self.get_excel)
         self.remove_btn.clicked.connect(self.remove_from_selected)
         self.add_btn.clicked.connect(self.add_to_selected)
         self.generate_btn.clicked.connect(self.open)
@@ -62,28 +54,15 @@ class MainWindow(QMainWindow):
         )
         self.selected_data.dropEvent = self.drop_event
 
-        app.aboutToQuit.connect(self.save_data)
+        app.aboutToQuit.connect(lambda: save_templates(self.templates))
+        self.load_templates()
 
-    def load_saved_data(self):
-        if not INI_FILE.exists():
-            return
-        config = configparser.ConfigParser()
-        config.read(INI_FILE, encoding="utf-8")
-        self.templates = [
-            Template(name, path) for name, path in config["templates"].items()
-        ]
+    def load_templates(self):
+        self.templates = load_templates()
         for template in self.templates:
             self.template_cb.addItem(template.name)
 
         self.template_file = self.templates[0].path if self.templates else None
-
-    def save_data(self):
-        config = configparser.ConfigParser()
-        config["templates"] = {
-            template.name: template.path for template in self.templates
-        }
-        with open(INI_FILE, "w", encoding="utf-8") as file:
-            config.write(file)
 
     def add_template(self):
         file_name, _ = QFileDialog.getOpenFileName(
@@ -173,7 +152,7 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(
             self, "Open Excel File", "", "Excel Files (*.xlsx)"
         )
-        return file_name
+        self.load_excel(file_name)
 
     def select_row_full_data(self, item):
         row_index = item.row()
@@ -305,9 +284,8 @@ class MainWindow(QMainWindow):
             self.full_data.setAcceptDrops(False)
             self.selected_data.setAcceptDrops(True)
 
-    def load_excel(self):
-        file_name = self.get_excel()
-        if not file_name:
+    def load_excel(self, file_path):
+        if not file_path:
             QMessageBox.warning(
                 self,
                 "Error",
@@ -316,7 +294,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self.df = pd.read_excel(file_name, sheet_name=0)
+        self.df = pd.read_excel(file_path, sheet_name=0)
         for column in self.df.columns:
             if self.df[column].dtype == "datetime64[ns]":
                 self.df[column] = self.df[column].apply(
@@ -342,7 +320,6 @@ class MainWindow(QMainWindow):
         self.selected_data.setColumnCount(self.df.shape[1])
         self.selected_data.setRowCount(0)
         self.original_selected_data = None
-
 
     def open(self):
         if not self.template_file:
