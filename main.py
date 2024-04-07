@@ -342,22 +342,7 @@ class MainWindow(QMainWindow):
         self.selected_data.setColumnCount(self.df.shape[1])
         self.selected_data.setRowCount(0)
         self.original_selected_data = None
-        self.excel_watcher.removePaths(self.excel_watcher.files())
-        if file_name not in self.excel_watcher.files():
-            self.excel_watcher.addPath(file_name)
 
-    def process_excel(self):
-        def callback(file_name):
-            if file_name:
-                self.load_excel(file_name)
-
-        QFileDialog.getOpenFileName(
-            self,
-            "Open Excel File",
-            "",
-            "Excel Files (*.xlsx)",
-            callback=callback,
-        )
 
     def open(self):
         if not self.template_file:
