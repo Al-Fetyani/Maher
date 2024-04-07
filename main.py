@@ -13,9 +13,8 @@ from pathlib import Path
 from word_processor import *
 import tempfile
 from utils import save_templates, load_templates
+from utils import file_watcher
 
-
-INI_FILE = Path(__file__).parent / "config.ini"
 
 file = Path(__file__).resolve()
 
@@ -152,6 +151,7 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(
             self, "Open Excel File", "", "Excel Files (*.xlsx)"
         )
+        file_watcher.start_watching(file_name, lambda: self.load_excel(file_name))
         self.load_excel(file_name)
 
     def select_row_full_data(self, item):
