@@ -9,6 +9,7 @@ pyqt6 = "*"
 openpyxl = "*"
 pywin32 = "*"
 python-docx = "*"
+watchdog = "*"
 
 [dev-packages]
 pyinstaller = "*"

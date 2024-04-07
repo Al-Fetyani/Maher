@@ -12,6 +12,11 @@ import sys
 from pathlib import Path
 from word_processor import *
 import tempfile
+import configparser
+from PyQt6.QtCore import QFileSystemWatcher
+
+
+INI_FILE = Path(__file__).parent / "config.ini"
 
 file = Path(__file__).resolve()
 
@@ -27,11 +32,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         uic.loadUi(file.parent / "ui.ui", self)
         self.show()
+        self.template_file = None
+        self.load_saved_data()
         self.full_data.itemClicked.connect(self.select_row_full_data)
         self.selected_data.itemClicked.connect(self.select_row_selected_data)
-        self.template_file = None
-        self.templates = []
-
         self.excel_btn.clicked.connect(self.load_excel)
         self.remove_btn.clicked.connect(self.remove_from_selected)
         self.add_btn.clicked.connect(self.add_to_selected)
@@ -59,11 +63,48 @@ class MainWindow(QMainWindow):
         )
         self.selected_data.dropEvent = self.drop_event
 
+        app.aboutToQuit.connect(self.save_data)
+
+        self.excel_watcher = QFileSystemWatcher()
+        self.excel_watcher.fileChanged.connect(self.reload_excel)
+
+    def reload_excel(self, file):
+        self.process_excel()
+
+    def load_saved_data(self):
+        if not INI_FILE.exists():
+            return
+        config = configparser.ConfigParser()
+        config.read(INI_FILE, encoding="utf-8")
+        self.templates = [
+            Template(name, path) for name, path in config["templates"].items()
+        ]
+        for template in self.templates:
+            self.template_cb.addItem(template.name)
+
+        self.template_file = self.templates[0].path if self.templates else None
+
+    def save_data(self):
+        config = configparser.ConfigParser()
+        config["templates"] = {
+            template.name: template.path for template in self.templates
+        }
+        with open(INI_FILE, "w", encoding="utf-8") as file:
+            config.write(file)
+
     def add_template(self):
         file_name, _ = QFileDialog.getOpenFileName(
             self, "Open Template File", "", "Word Files (*.docx)"
         )
         if not file_name:
+            return
+        if any(template.path == file_name for template in self.templates):
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Template already exists",
+                QMessageBox.StandardButton.Ok,
+            )
             return
         self.templates.append(Template(Path(file_name).stem, file_name))
         self.template_cb.addItem(Path(file_name).stem)
@@ -273,42 +314,57 @@ class MainWindow(QMainWindow):
 
     def load_excel(self):
         file_name = self.get_excel()
-        if file_name:
-            self.df = pd.read_excel(file_name, sheet_name=0)
-            for column in self.df.columns:
-                if self.df[column].dtype == "datetime64[ns]":
-                    self.df[column] = self.df[column].apply(
-                        lambda x: x.strftime("%Y-%m-%d")
-                    )
-            self.full_data.setRowCount(self.df.shape[0])
-            self.full_data.setColumnCount(self.df.shape[1])
-            self.full_data.setHorizontalHeaderLabels(self.df.columns)
-            self.selected_data.setColumnCount(self.df.shape[1])
-            self.selected_data.setHorizontalHeaderLabels(self.df.columns)
-
-            for i in range(self.df.shape[0]):
-                for j in range(self.df.shape[1]):
-                    self.full_data.setItem(
-                        i, j, QTableWidgetItem(str(self.df.iat[i, j]))
-                    )
-            self.full_data.setEditTriggers(
-                QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
-            )
-            self.full_data.setDragDropMode(
-                QtWidgets.QAbstractItemView.DragDropMode.DragDrop
-            )
-            self.full_data.setAcceptDrops(False)
-            self.selected_data.setAcceptDrops(True)
-            self.selected_data.setColumnCount(self.df.shape[1])
-            self.selected_data.setRowCount(0)
-            self.original_selected_data = None
-        else:
+        if not file_name:
             QMessageBox.warning(
                 self,
                 "Error",
                 "No file selected",
                 QMessageBox.StandardButton.Ok,
             )
+            return
+
+        self.df = pd.read_excel(file_name, sheet_name=0)
+        for column in self.df.columns:
+            if self.df[column].dtype == "datetime64[ns]":
+                self.df[column] = self.df[column].apply(
+                    lambda x: x.strftime("%Y-%m-%d")
+                )
+        self.full_data.setRowCount(self.df.shape[0])
+        self.full_data.setColumnCount(self.df.shape[1])
+        self.full_data.setHorizontalHeaderLabels(self.df.columns)
+        self.selected_data.setColumnCount(self.df.shape[1])
+        self.selected_data.setHorizontalHeaderLabels(self.df.columns)
+
+        for i in range(self.df.shape[0]):
+            for j in range(self.df.shape[1]):
+                self.full_data.setItem(i, j, QTableWidgetItem(str(self.df.iat[i, j])))
+        self.full_data.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.full_data.setDragDropMode(
+            QtWidgets.QAbstractItemView.DragDropMode.DragDrop
+        )
+        self.full_data.setAcceptDrops(False)
+        self.selected_data.setAcceptDrops(True)
+        self.selected_data.setColumnCount(self.df.shape[1])
+        self.selected_data.setRowCount(0)
+        self.original_selected_data = None
+        self.excel_watcher.removePaths(self.excel_watcher.files())
+        if file_name not in self.excel_watcher.files():
+            self.excel_watcher.addPath(file_name)
+
+    def process_excel(self):
+        def callback(file_name):
+            if file_name:
+                self.load_excel(file_name)
+
+        QFileDialog.getOpenFileName(
+            self,
+            "Open Excel File",
+            "",
+            "Excel Files (*.xlsx)",
+            callback=callback,
+        )
 
     def open(self):
         if not self.template_file:
@@ -316,6 +372,14 @@ class MainWindow(QMainWindow):
                 self,
                 "Error",
                 "No template file selected",
+                QMessageBox.StandardButton.Ok,
+            )
+            return
+        if self.selected_data.rowCount() == 0:
+            QMessageBox.warning(
+                self,
+                "Error",
+                "No data selected",
                 QMessageBox.StandardButton.Ok,
             )
             return
