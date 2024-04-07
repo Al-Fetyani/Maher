@@ -13,7 +13,6 @@ from pathlib import Path
 from word_processor import *
 import tempfile
 import configparser
-from PyQt6.QtCore import QFileSystemWatcher
 
 
 INI_FILE = Path(__file__).parent / "config.ini"
@@ -64,12 +63,6 @@ class MainWindow(QMainWindow):
         self.selected_data.dropEvent = self.drop_event
 
         app.aboutToQuit.connect(self.save_data)
-
-        self.excel_watcher = QFileSystemWatcher()
-        self.excel_watcher.fileChanged.connect(self.reload_excel)
-
-    def reload_excel(self, file):
-        self.process_excel()
 
     def load_saved_data(self):
         if not INI_FILE.exists():
