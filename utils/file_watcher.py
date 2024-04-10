@@ -43,15 +43,8 @@ def watch_file(file_path: str, input_function):
     observer.join()
 
 
-i = 1
 
 
-def your_input_function():
-    global i
-    print(f"File modified {i} times")
-    i += 1
-
-
-if __name__ == "__main__":
-    file_path = r"C:\Users\Fetyani\Desktop\Maher\test.xlsx"
-    watch_file(file_path, your_input_function)
+# if __name__ == "__main__":
+#     file_path = r"C:\Users\Fetyani\Desktop\Maher\test.xlsx"
+#     watch_file(file_path, your_input_function)

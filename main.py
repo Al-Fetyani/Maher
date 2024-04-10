@@ -12,7 +12,13 @@ import sys
 from pathlib import Path
 from word_processor import *
 import tempfile
-from utils import save_templates, load_templates
+from utils import (
+    save_templates,
+    load_templates,
+    save_excel,
+    load_excels,
+    create_ini_file,
+)
 from utils import file_watcher
 
 
@@ -24,6 +30,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         uic.loadUi(file.parent / "ui.ui", self)
         self.show()
+        if not Path("config.ini").exists():
+            create_ini_file()
         self.full_data.itemClicked.connect(self.select_row_full_data)
         self.selected_data.itemClicked.connect(self.select_row_selected_data)
         self.excel_btn.clicked.connect(self.get_excel)
@@ -37,7 +45,7 @@ class MainWindow(QMainWindow):
 
         self.search_txt.textChanged.connect(self.search)
         self.original_selected_data = None
-
+        self.excel_file = None
         self.selected_data.setAcceptDrops(True)
         self.selected_data.setDragEnabled(True)
         self.selected_data.viewport().setAcceptDrops(True)
@@ -51,10 +59,24 @@ class MainWindow(QMainWindow):
         self.selected_data.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
+        self.watcher_started = False
         self.selected_data.dropEvent = self.drop_event
 
-        app.aboutToQuit.connect(lambda: save_templates(self.templates))
+        app.aboutToQuit.connect(self.on_close)
         self.load_templates()
+        self.load_excel_file()
+
+    def on_close(self):
+        if self.excel_file:
+            save_excel(self.excel_file)
+        if self.templates:
+            save_templates(self.templates)
+
+    def load_excel_file(self):
+        file = load_excels()
+        if not file:
+            return
+        self.load_excel(file)
 
     def load_templates(self):
         self.templates = load_templates()
@@ -151,7 +173,9 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(
             self, "Open Excel File", "", "Excel Files (*.xlsx)"
         )
-        file_watcher.start_watching(file_name, lambda: self.load_excel(file_name))
+        if not file_name:
+            return
+        self.excel_file = file_name
         self.load_excel(file_name)
 
     def select_row_full_data(self, item):
@@ -300,6 +324,9 @@ class MainWindow(QMainWindow):
                 self.df[column] = self.df[column].apply(
                     lambda x: x.strftime("%Y-%m-%d")
                 )
+        if self.watcher_started == False:
+            file_watcher.start_watching(file_path, lambda: self.load_excel(file_path))
+            self.watcher_started = True
         self.full_data.setRowCount(self.df.shape[0])
         self.full_data.setColumnCount(self.df.shape[1])
         self.full_data.setHorizontalHeaderLabels(self.df.columns)
